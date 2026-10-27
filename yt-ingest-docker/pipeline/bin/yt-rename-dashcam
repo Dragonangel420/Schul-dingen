@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="/data/downloads/Automatic/DashcamDriversGermany"
+
+echo "[rename] Dashcam normalization started"
+
+# Skip gracefully if directory does not exist
+if [[ ! -d "$ROOT_DIR" ]]; then
+    echo "[rename] Directory does not exist: $ROOT_DIR"
+    echo "[rename] Nothing to rename"
+    exit 0
+fi
+
+# Recursively find all files
+find "$ROOT_DIR" -type f | while read -r file; do
+    filename=$(basename "$file")
+    dir=$(dirname "$file")
+
+    # Extract the first # followed by 1-4 digits
+    if [[ "$filename" =~ \#([0-9]{1,4}) ]]; then
+        number="${BASH_REMATCH[1]}"
+
+        # Remove only the first #digits occurrence
+        new_filename="${filename/#\#${number}/}"
+        new_filename="${filename//\#${number}/}"
+        new_filename="${new_filename//  / }" # remove double space if any
+
+        # Prepend number
+        new_filename="${number} - ${new_filename}"
+
+        # Sanitize whitespace
+        new_filename="$(echo "$new_filename" | sed 's/^[ \t]*//;s/[ \t]*$//')"
+
+        # Rename the file
+        old_path="$file"
+        new_path="$dir/$new_filename"
+
+        if [[ "$old_path" != "$new_path" ]]; then
+            echo "Renaming:"
+            echo "  FROM: $old_path"
+            echo "  TO:   $new_path"
+            mv "$old_path" "$new_path"
+        fi
+    fi
+done
+
+
+echo "[rename] done"

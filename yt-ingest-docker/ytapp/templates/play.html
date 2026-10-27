@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ v.video_name }} - yt-ingest{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('videos_page') }}">Back to videos</a></p>
+<h1 class="video-title">{{ v.video_name }}</h1>
+<p class="hint">{{ v.channel_name or 'Unknown channel' }}, {{ v.video_length|duration }}, {{ v.file_size|size }}</p>
+
+{% if playable %}
+  <video controls preload="metadata" src="{{ url_for('video_file', row_id=v.id) }}"></video>
+  <p class="hint">Chrome and Firefox play MKV files directly. If this browser shows nothing (Safari does not support MKV),
+    <a href="{{ url_for('video_file', row_id=v.id, download=1) }}">download the file</a> and open it with a player such as VLC, or open the
+    downloads folder{% if host_path %} <code>{{ host_path }}</code>{% endif %} in Finder or your file manager.</p>
+{% else %}
+  <p class="alert" role="alert">The file is not in the download folder any more ({{ v.status }}).
+    The video stays in the database, so it will not be downloaded again.</p>
+{% endif %}
+{% if v.video_url %}<p class="hint">Source: <code>{{ v.video_url }}</code></p>{% endif %}
+{% endblock %}

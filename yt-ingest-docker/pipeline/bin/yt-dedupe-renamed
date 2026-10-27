@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 0002
+
+SPOOL="/data/downloads/Automatic"
+ARCHIVE="/etc/yt-ingest/archive.txt"
+LOG="/var/log/yt-ingest/ingest.log"
+DRY_RUN="${DRY_RUN:-0}"   # DRY_RUN=1 yt-dedupe-renamed -> log only, no deletes/writes
+
+log(){ echo "$(date -Is) [dedupe] $*" >> "$LOG"; }
+
+if [[ "$DRY_RUN" == "1" ]]; then
+    log "start duplicate-ID cleanup (DRY RUN)"
+else
+    log "start duplicate-ID cleanup"
+fi
+
+if [[ ! -d "$SPOOL" ]]; then
+    log "spool directory missing, nothing to do"
+    exit 0
+fi
+
+MANIFEST=$(mktemp)
+trap 'rm -f "$MANIFEST"' EXIT
+
+# Manifest: <id>\t<mtime>\t<ctime>\t<path>
+# mtime is the primary key (what Nemo shows as "Date Modified").
+# ctime only breaks ties: a title-only rename on YouTube's end can
+# leave two copies of the same video with an identical mtime, since
+# yt-dlp derives it from the remote response and the underlying bytes
+# haven't changed. ctime is always stamped locally at write time and
+# won't tie in practice.
+while IFS= read -r -d '' file; do
+    filename=$(basename -- "$file")
+    [[ "$filename" =~ \[([A-Za-z0-9_-]{11})\]\.mkv$ ]] || continue
+    id="${BASH_REMATCH[1]}"
+    mtime=$(stat -c '%Y' -- "$file")
+    ctime=$(stat -c '%Z' -- "$file")
+    printf '%s\t%s\t%s\t%s\n' "$id" "$mtime" "$ctime" "$file" >> "$MANIFEST"
+done < <(find "$SPOOL" -type f -iname '*.mkv' -print0)
+
+if [[ ! -s "$MANIFEST" ]]; then
+    log "no candidate files found"
+    exit 0
+fi
+
+removed=0
+archived=0
+
+for id in $(cut -f1 "$MANIFEST" | sort -u); do
+    count=$(awk -F'\t' -v id="$id" '$1==id' "$MANIFEST" | wc -l)
+    (( count > 1 )) || continue
+
+    rows=$(awk -F'\t' -v id="$id" '$1==id' "$MANIFEST" | sort -t $'\t' -k2,2n -k3,3n)
+    keep=$(head -n1 <<<"$rows" | cut -f4)
+    tie_count=$(cut -f2 <<<"$rows" | sort -u | wc -l)
+
+    if [[ "$tie_count" -lt "$count" ]]; then
+        log "duplicate id ${id}: ${count} copies, mtime tie broken via ctime -- keeping '$(basename -- "$keep")'"
+    else
+        log "duplicate id ${id}: ${count} copies, keeping oldest '$(basename -- "$keep")'"
+    fi
+
+    while IFS=$'\t' read -r _ _ _ path; do
+        [[ "$path" == "$keep" ]] && continue
+        if [[ "$DRY_RUN" == "1" ]]; then
+            log "  would delete: $(basename -- "$path")"
+        else
+            rm -f -- "$path"
+            log "  deleted: $(basename -- "$path")"
+            removed=$((removed+1))
+        fi
+    done <<<"$rows"
+
+    if ! grep -qxF "youtube ${id}" "$ARCHIVE" 2>/dev/null; then
+        if [[ "$DRY_RUN" == "1" ]]; then
+            log "  would append id ${id} to archive"
+        else
+            printf 'youtube %s\n' "$id" >> "$ARCHIVE"
+            archived=$((archived+1))
+            log "  appended id ${id} to archive"
+        fi
+    fi
+done
+
+log "duplicate-ID cleanup done: removed ${removed} file(s), archived ${archived} id(s)"

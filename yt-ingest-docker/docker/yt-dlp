@@ -1,0 +1,5 @@
+#!/opt/venv/bin/python
+# Installed as /usr/local/bin/yt-dlp - see ytapp/shim.py for what this does and why.
+import sys
+from ytapp.shim import main
+sys.exit(main())

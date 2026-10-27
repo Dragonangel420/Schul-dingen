@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Overview - yt-ingest{% endblock %}
+{% block content %}
+<section class="state" aria-live="polite">
+  <h1 id="state-line">{% if s.running %}Downloading: run #{{ s.run_id }}, {{ s.run_new }} new so far{% else %}Idle{% endif %}</h1>
+  <p id="state-sub">
+    {% if s.next_run %}Next scheduled run {{ s.next_run }} (daily at {{ s.schedule }}).{% endif %}
+    {{ s.stats.downloaded }} videos on disk, {{ s.stats.total }} known to the database.
+  </p>
+  <div class="actions">
+    <button id="run-now" type="button" {% if s.running %}disabled{% endif %}>Run now</button>
+    <span id="run-msg" role="status"></span>
+  </div>
+</section>
+
+<div id="storage-alert" class="alert" role="alert" {% if not s.storage_low %}hidden{% endif %}>
+  Disk space is low: {{ s.disk.free|size }} free, at least {{ s.min_free|size }} are needed.
+  {% if s.policy == 'prune' %}The oldest downloads will be deleted at the next run (their ids stay in the database, so nothing is downloaded twice).
+  {% else %}New downloads are paused and nothing is deleted. Free up space, or start the container with STORAGE_POLICY=prune.{% endif %}
+</div>
+
+<section class="disk" aria-label="Disk space">
+  <div class="disk-head"><strong id="disk-free">{{ s.disk.free|size }} free</strong>
+    <span id="disk-total">of {{ s.disk.total|size }}; downloads stop below {{ s.min_free|size }}</span></div>
+  <div class="meter" role="img" aria-label="Disk usage"
+       data-used="{{ (s.disk.used / s.disk.total * 100) if s.disk.total else 0 }}"
+       data-limit="{{ ((s.disk.total - s.min_free) / s.disk.total * 100) if s.disk.total else 100 }}">
+    <span class="fill" id="meter-fill"></span><span class="limit" id="meter-limit"></span>
+  </div>
+</section>
+
+<section class="log-section">
+  <h2>Live log</h2>
+  <pre id="log" class="log" tabindex="0" aria-label="Pipeline log">Loading log ...</pre>
+  <p class="hint">Same output as <code>docker logs -f yt-ingest</code>. Downloads are saved to
+    {% if host_path %}<code>{{ host_path }}</code>{% else %}<code>/data/downloads/Automatic</code> inside the container{% endif %}.</p>
+</section>
+
+<section>
+  <h2>Recent runs</h2>
+  {% if s.runs %}
+  <table>
+    <thead><tr><th>Run</th><th>Started (UTC)</th><th>Trigger</th><th>Result</th><th class="num">New videos</th><th class="num">Failed items</th></tr></thead>
+    <tbody id="runs-body">
+    {% for r in s.runs %}
+      <tr><td>#{{ r.id }}</td><td>{{ r.started_at }}</td><td>{{ r.trigger }}</td>
+          <td><span class="tag tag-{{ r.result }}">{{ r.result|replace('_', ' ') }}</span>{% if r.note %} <span class="muted">{{ r.note }}</span>{% endif %}</td>
+          <td class="num">{{ r.new_videos }}</td><td class="num">{{ r.failures }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No run yet. The first run starts automatically with the container; press Run now to start one.</p>
+  {% endif %}
+</section>
+{% endblock %}

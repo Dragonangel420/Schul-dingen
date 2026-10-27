@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="/data/downloads/Automatic"
+
+echo "[cleanup] start strict base-name cleanup"
+
+# Recursively process all files
+while IFS= read -r -d '' file; do
+    filename=$(basename "$file")
+    dir=$(dirname "$file")
+    ext="${filename##*.}"
+
+    # Skip .mkv files, they are okay unless a non-mkv with the same base exists
+    if [[ "$ext" == "mkv" ]]; then
+        continue
+    fi
+
+    # Extract the exact base name (everything before the last dot)
+    base="${filename%.*}"
+
+    # Find all files in this directory with the exact same base name
+    # This includes .mkv, .mp4, .webm, .part, etc.
+    matches=("$dir/$base".*)
+
+    if [[ ${#matches[@]} -gt 0 ]]; then
+        echo "[cleanup] Non-mkv file detected: $filename"
+        echo "[cleanup] Deleting all files with base name '$base' in $dir"
+
+        # Delete all matches
+        for f in "${matches[@]}"; do
+            [[ -f "$f" ]] && rm -f "$f" && echo "  Deleted: $f"
+        done
+    fi
+
+done < <(find "$ROOT" -type f -print0)
+
+echo "[cleanup] done"

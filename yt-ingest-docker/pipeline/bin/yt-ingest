@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 0002
+
+BASE="/etc/yt-ingest"
+LOG="/var/log/yt-ingest/ingest.log"
+ARCHIVE="$BASE/archive.txt"
+SPOOL="/data/downloads/Automatic"
+
+mkdir -p /run/yt-ingest
+LOCK="/run/yt-ingest/yt-ingest.lock"
+exec 9>"$LOCK"
+flock -n 9 || exit 0
+
+log(){ echo "$(date -Is) $*" >> "$LOG"; }
+
+run(){
+  FILE="$1"
+  CONF="$2"
+
+  while read -r URL; do
+    [[ -z "$URL" || "$URL" =~ ^# ]] && continue
+
+    log "[start] $URL"
+
+    yt-dlp \
+      --config-location "$CONF" \
+      --download-archive "$ARCHIVE" \
+      --output "$SPOOL/%(channel)s/%(title).200B [%(id)s].%(ext)s" \
+      "$URL" >> "$LOG" 2>&1 || log "[fail] $URL"
+
+    log "[done] $URL"
+  done < "$FILE"
+}
+
+log "[archive]"
+/usr/local/bin/yt-build-archive
+
+log "[cleanup]"
+/usr/local/bin/yt-cleanup
+
+log "[dedupe]"
+/usr/local/bin/yt-dedupe-renamed
+
+log "[rename]"
+/usr/local/bin/yt-rename-dashcam
+
+run "$BASE/channels_1080p.conf" "$BASE/yt-dlp_1080p.conf"
+run "$BASE/channels_2160p.conf" "$BASE/yt-dlp_2160p.conf"
+run "$BASE/channels_curated.conf" "$BASE/yt-dlp_curated.conf"
+
+log "done"
+

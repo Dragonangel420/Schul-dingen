@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Live log - yt-ingest{% endblock %}
+{% block content %}
+<h1>Live log</h1>
+<p id="live-state" class="hint" aria-live="polite">Connecting ...</p>
+<pre id="log" class="log log-full" tabindex="0" aria-label="Pipeline log">Loading log ...</pre>
+<p class="hint">Same output as <code>docker logs -f yt-ingest</code>. The page updates every two seconds.
+  Finished videos are listed under <a href="{{ url_for('videos_page') }}">Videos</a>{% if host_path %} and stored in <code>{{ host_path }}</code>{% endif %}.</p>
+{% endblock %}

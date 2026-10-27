@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="/data/library"
+OUT="/etc/yt-ingest/archive.txt"
+
+TMP=$(mktemp)
+trap 'rm -f "$TMP"' EXIT
+
+find "$ROOT" -type f -printf '%f\n' \
+| sed -n 's/.*\[\([A-Za-z0-9_-]\{11\}\)\].*/youtube \1/p' \
+| sort -u > "$TMP"
+
+install -o yt-ingest -g ytshare -m 664 "$TMP" "$OUT"
